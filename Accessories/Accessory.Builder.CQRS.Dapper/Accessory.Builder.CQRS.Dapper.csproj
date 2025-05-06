@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Version>1.0.0</Version>
+        <AssemblyVersion>0.0.0.1</AssemblyVersion>
+        <PackageVersion>1.0.0</PackageVersion>
+        <DefaultLanguage>en-US</DefaultLanguage>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <LangVersion>10.0</LangVersion>
+        <Nullable>enable</Nullable>
+        <WarningsAsErrors>CS8653;CS8625;CS8623;CS8618;CS8603;CS8602;CS8600</WarningsAsErrors>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Dapper" Version="2.0.123" />
+        <PackageReference Include="Dapper.SqlBuilder" Version="2.0.78" />
+        <PackageReference Include="FluentValidation" Version="11.5.2" />
+        <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.1" />
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Accessory.Builder.Core\Accessory.Builder.Core.csproj" />
+        <ProjectReference Include="..\Accessory.Builder.CQRS.Core\Accessory.Builder.CQRS.Core.csproj" />
+        <ProjectReference Include="..\Accessory.Builder.Persistence.Core\Accessory.Builder.Persistence.Core.csproj" />
+    </ItemGroup>
+
+</Project>

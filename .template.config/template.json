@@ -1,0 +1,12 @@
+{
+    "author": "-",
+    "classifications": [ "core" ],
+    "name": "NET API template",
+    "identity": "Template",
+    "shortName": "template.paa",
+    "tags": {
+        "language": "C#"
+    },
+    "sourceName": "Template",
+    "preferNameDirectory" : "true"
+}

@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <Version>1.0.0</Version>
+        <AssemblyVersion>0.0.0.1</AssemblyVersion>
+        <PackageVersion>1.0.0</PackageVersion>
+        <DefaultLanguage>en-US</DefaultLanguage>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <LangVersion>10.0</LangVersion>
+        <Nullable>enable</Nullable>
+        <WarningsAsErrors>CS8653;CS8625;CS8623;CS8618;CS8603;CS8602;CS8600</WarningsAsErrors>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Accessories\Accessory.Builder.Logging.OpenTelemetry\Accessory.Builder.Logging.OpenTelemetry.csproj" />
+        <ProjectReference Include="..\Accessories\Accessory.Builder.Outbox.EntityFramework\Accessory.Builder.Outbox.EntityFramework.csproj" />
+        <ProjectReference Include="..\Accessories\Accessory.Builder.Redis\Accessory.Builder.Redis.csproj" />
+        <ProjectReference Include="..\TaskManager.Application\TaskManager.Application.csproj" />
+        <ProjectReference Include="..\TaskManager.Core\TaskManager.Core.csproj" />
+        <ProjectReference Include="..\Accessories\Accessory.Builder.CQRS.Dapper\Accessory.Builder.CQRS.Dapper.csproj" />
+        <ProjectReference Include="..\Accessories\Accessory.Builder.CQRS.IntegrationEvents\Accessory.Builder.CQRS.IntegrationEvents.csproj" />
+        <ProjectReference Include="..\Accessories\Accessory.Builder.MessageBus.ServiceBus\Accessory.Builder.MessageBus.ServiceBus.csproj" />
+        <ProjectReference Include="..\Accessories\Accessory.Builder.Persistence.EntityFramework.Audit\Accessory.Builder.Persistence.EntityFramework.Audit.csproj" />
+        <ProjectReference Include="..\Accessories\Accessory.Builder.Core\Accessory.Builder.Core.csproj" />
+        <ProjectReference Include="..\Accessories\Accessory.Builder.CQRS.Core\Accessory.Builder.CQRS.Core.csproj" />
+        <ProjectReference Include="..\Accessories\Accessory.Builder.Persistence.EntityFramework.UnitOfWork\Accessory.Builder.Persistence.EntityFramework.UnitOfWork.csproj" />
+        <ProjectReference Include="..\Accessories\Accessory.Builder.Persistence.EntityFramework\Accessory.Builder.Persistence.EntityFramework.csproj" />
+    </ItemGroup>
+
+
+
+</Project>

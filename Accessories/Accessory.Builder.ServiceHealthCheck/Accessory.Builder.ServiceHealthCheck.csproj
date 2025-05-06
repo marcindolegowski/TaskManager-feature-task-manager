@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <Version>1.0.0</Version>
+        <AssemblyVersion>0.0.0.1</AssemblyVersion>
+        <PackageVersion>1.0.0</PackageVersion>
+        <DefaultLanguage>en-US</DefaultLanguage>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    </PropertyGroup>
+    
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <LangVersion>10.0</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AspNetCore.HealthChecks.AzureStorage" Version="3.2.0" />
+        <PackageReference Include="AspNetCore.HealthChecks.SqlServer" Version="3.0.0" />
+        <PackageReference Include="AspNetCore.HealthChecks.Redis" Version="3.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Accessory.Builder.Core\Accessory.Builder.Core.csproj" />
+      <ProjectReference Include="..\Accessory.Builder.MessageBus\Accessory.Builder.MessageBus.csproj" />
+      <ProjectReference Include="..\Accessory.Builder.Persistence.Core\Accessory.Builder.Persistence.Core.csproj" />
+      <ProjectReference Include="..\Accessory.Builder.Redis\Accessory.Builder.Redis.csproj" />
+    </ItemGroup>
+
+</Project>

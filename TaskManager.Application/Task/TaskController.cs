@@ -72,6 +72,19 @@ public class TaskController : BaseController
     }
 
     /// <summary>
+    /// Request the agent to implement a task and open a draft PR
+    /// </summary>
+    [HttpPost("implement")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [Produces("application/json")]
+    public async Task<IActionResult> Implement([FromBody] RequestTaskImplementationCommand command)
+    {
+        await _commandDispatcher.Send(command);
+        return Ok();
+    }
+
+    /// <summary>
     /// Delete task's betting
     /// </summary>
     [HttpDelete("")]

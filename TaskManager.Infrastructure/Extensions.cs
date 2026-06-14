@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net.Http;
 using Accessory.Builder.Core.Builders;
 using Accessory.Builder.Core.Domain.Exceptions;
 using Accessory.Builder.CQRS.Core;
@@ -23,8 +24,10 @@ using Accessory.Persistence.EntityFramework.UnitOfWork.Common;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using TaskManager.Application.Task.Agents;
 using TaskManager.Application.Task.Events;
 using TaskManager.Application.User.Events;
+using TaskManager.Infrastructure.Agents;
 using TaskManager.Infrastructure.Events;
 using TaskManager.Infrastructure.Persistence;
 using TaskManager.Infrastructure.Persistence.Repositories;
@@ -72,6 +75,12 @@ public static class Extensions
         builder.AddServiceBusWorker();
         builder.AddServiceBusPublisher<RemovalTaskEvent>();
         builder.AddServiceBusPublisher<TaskCompletedEvent>();
+        builder.AddServiceBusPublisher<TaskImplementationRequested>();
+
+        // Agent sidecar (out-of-process Claude Agent SDK). API never runs the agent itself.
+        var sidecarUrl = Environment.GetEnvironmentVariable("AGENT_SIDECAR_URL") ?? "http://localhost:8787";
+        builder.Services.AddSingleton<IAgentSidecarClient>(
+            _ => new HttpAgentSidecarClient(new HttpClient { BaseAddress = new Uri(sidecarUrl) }));
 
         return builder;
     }
@@ -82,6 +91,7 @@ public static class Extensions
         var busSubscriber = builder.ApplicationServices.GetRequiredService<IEventSubscriber>();
         busSubscriber.Subscribe<RemovalTaskEvent, RemovalTaskEventHandler>();
         busSubscriber.Subscribe<TaskCompletedEvent, TaskCompletedEventHandler>();
+        busSubscriber.Subscribe<TaskImplementationRequested, TaskImplementationRequestedHandler>();
         return builder;
     }
         

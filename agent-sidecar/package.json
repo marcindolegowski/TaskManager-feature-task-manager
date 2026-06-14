@@ -1,0 +1,18 @@
+{
+  "name": "taskmanager-agent-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Out-of-process Claude Agent SDK sidecar that turns a TaskManager task into a draft pull request.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "express": "^4.19.2"
+  }
+}

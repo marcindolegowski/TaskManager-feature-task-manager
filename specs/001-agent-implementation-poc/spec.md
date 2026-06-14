@@ -33,11 +33,33 @@ orchestrates, the agent runs elsewhere, output is a reviewable draft PR.
 - **FR5**: Untrusted input must not reach the agent (the `implement` endpoint is for
   trusted callers; the public `POST /task` is not wired to the agent).
 
+### Evidence-based requirements
+
+Backed by program-repair / SWE-agent research (see `docs/cli-deployment-strategy.md`
+§8 for citations). These raise patch quality and are the adoption order for the PoC.
+
+- **FR6 (test-execution gate)**: the agent loops `dotnet build` + tests, reads
+  failures (with full traces, not just the failing line), and opens the PR **only
+  when green**. Highest-ROI lever in the literature.
+- **FR7 (reviewer / LLM-as-judge)**: before the human, an automated review checks
+  the patch against the spec and posts a **confidence score + explanation** on the PR.
+- **FR8 (feedback loop with memory + rollback)**: PR comments re-trigger a resumed
+  session; keep attempt history, require each iteration to strictly improve, and
+  **cap iterations and cost** per task.
+- **FR9 (intent inference)**: derive and verify a spec from the task instead of
+  passing the one-line `Description` verbatim (`/speckit-specify` → `/speckit-clarify`).
+- **FR10 (best-of-N, gated by complexity)**: for complex tasks only, sample N
+  candidate patches and select by green tests / highest judge confidence.
+
 ## Success criteria
 
 - A task name + repo URL results in a draft PR on a `task/{id}` branch.
 - No agent code runs inside the API process.
+- The PR is opened only after `dotnet build` + tests pass (FR6).
+- An automated reviewer confidence note is present on the PR (FR7).
 - Token usage/cost is logged per `TaskId` (observability principle).
+- Realistic expectation: the agent produces a reviewable first draft, not a
+  guaranteed-mergeable change (~25–31% land rate in comparable deployments).
 
 ## Out of scope (this PoC)
 

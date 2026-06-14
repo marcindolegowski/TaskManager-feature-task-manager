@@ -111,3 +111,71 @@ Defer until needed: the code-search **MCP RAG** layer (agentic search is enough 
   identity) vs a Claude subscription login — decide before high-volume rollout.
 - Where the sidecar runs: ACA Job (KEDA on our RabbitMQ) vs a long-lived container.
 - Revisit Cursor SDK (multi-model) if vendor-neutrality becomes a hard requirement.
+
+## 8. Evidence-based improvements (research-backed)
+
+How to make the `task → PR` process more reliable, ranked by strength of evidence.
+Each lever maps to a concrete change in the sidecar / SDD flow. References are
+peer-reviewed / arXiv program-repair and SWE-agent literature.
+
+1. **Execution/test feedback as the core loop (highest ROI).** Reading test/run
+   output and iterating beats one-shot generation: Self-Debugging adds up to +12%
+   and matches 10× sampling efficiency [3]; iterative repair on test signal alone
+   gives +65% Pass@1 in TraceCoder [4]; production ReAct + tests + static analysis
+   solves at ~11.8 feedback iterations [8]. → The sidecar MUST loop
+   `dotnet build` + tests, read failures, and only open the PR when green.
+
+2. **Feed runtime evidence, not just stack traces.** Intermediate runtime state
+   beats surface logs: DebugRepair +26% [5], interactive-debugger dynamic analysis
+   +5–60% [1], trace-driven analysis [4]. → On red tests, pass full traces/asserts
+   to the agent, not just the failure line.
+
+3. **Structure- and test-aware fault localization (not just grep).**
+   AutoCodeRover uses AST-level code search + spectrum-based localization → 19% on
+   SWE-bench-lite at ~$0.43 / ~4 min per issue [7]; contrastive failing/passing
+   test pairs sharpen root-cause [9]. → Enrich context with compiler errors + test
+   stack traces as a localization signal.
+
+4. **Reviewer agent / LLM-as-judge before the human.** Production APR pairs the
+   agent with an LLM-as-Judge then human review [8]; SpecRover's reviewer emits a
+   confidence measure → +50% over its baseline at $0.65/issue [10]. → Add an
+   automated patch-vs-spec review with a confidence score, posted on the PR (our
+   SDD `/speckit-analyze`).
+
+5. **Specification inference + verification (the science behind our SDD layer).**
+   SpecRover shows inferring and verifying intent yields +50% [10]. → Don't pass the
+   one-line `Description` verbatim; derive and verify a spec (`specify` / `clarify`).
+
+6. **Feedback loop with memory + rollback.** Keep a memory of failed attempts and
+   require each iteration to strictly improve (TraceCoder HLLM + rollback [4]); rank
+   candidates and balance repair-vs-regenerate (SEIDR [6]). → The PR-comment loop
+   keeps attempt history, enforces improvement, and caps iterations/cost.
+
+7. **Best-of-N, gated by complexity.** Sampling multiple patches and selecting by
+   tests/confidence raises success at token cost [3][6]. → Hard tasks only: N
+   candidates → pick the one with green tests / highest judge confidence.
+
+8. **Stage the work (Explore → Plan → Implement → Verify) + repo context files.**
+   Staging reduces errors; `CLAUDE.md` / constitution keep output in-bounds; treat
+   agent output like a junior dev's — verify everything (practitioner consensus).
+
+**Reality check.** In a real large-codebase deployment only ~25–31% of generated
+fixes landed after review; the rest were valued as "good starting points" [8]. The
+agent is an accelerator / first draft, not an autopilot — which is exactly why we
+keep draft-PR-only + a human gate. The upside: well-scaffolded agents are cheap and
+fast per task ($0.43–0.65, minutes) [7][10]; the cost concern is volume, not a run.
+
+**Adoption order for the PoC:** (1) test-execution gate, (2) reviewer/LLM-as-judge
+step, (3) memory+rollback feedback loop, (4) structure/test-aware localization +
+best-of-N for hard tasks, (5) enforce `specify`/`clarify` as intent inference.
+
+### References
+- [1] InspectCoder — https://consensus.app/papers/details/93e37b0f3d20500d99d901fbff7396f7/
+- [3] Teaching LLMs to Self-Debug — https://consensus.app/papers/details/7cfefb6d86e553ae8a92e0881d16891a/
+- [4] TraceCoder — https://consensus.app/papers/details/e689ae2b21d758d9a8d08e40aaade104/
+- [5] DebugRepair — https://consensus.app/papers/details/826a10a5c0ee5bea90be0426060b216b/
+- [6] SEIDR (Iterative Multi-Agent Debugging) — https://consensus.app/papers/details/85ec6e3d721b589d84a872a8825d3bc1/
+- [7] AutoCodeRover — https://consensus.app/papers/details/fcabd95011765eea90d57a6b2f3af957/
+- [8] Agentic Program Repair from Test Failures at Scale — https://consensus.app/papers/details/7bafa39bc5725a9f860cc1eb2a6acc2e/
+- [9] ContrastRepair — https://consensus.app/papers/details/e1a1c2d702935c3cacab2dc349a02d7f/
+- [10] SpecRover — https://consensus.app/papers/details/ccf795fd03c454028066a85b371be803/

@@ -28,25 +28,36 @@ const SYSTEM_PROMPT =
   "You are a senior engineer. Obey the repository constitution at " +
   ".specify/memory/constitution.md. Produce a focused, reviewable change.";
 
+// Per-run credentials: each task can run under the requesting developer's own Claude
+// account (like `claude login`). `query()`'s `env` replaces the subprocess environment,
+// so we spread process.env and override the auth vars per call — isolated across runs.
+function agentEnv(credential) {
+  const c = credential || {};
+  const overrides = {};
+  if (c.oauthToken) overrides.CLAUDE_CODE_OAUTH_TOKEN = c.oauthToken;
+  if (c.apiKey) overrides.ANTHROPIC_API_KEY = c.apiKey;
+  return { ...process.env, ...overrides };
+}
+
 const app = express();
 app.use(express.json());
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 // Initial run: implement a task and open a draft PR.
 app.post("/run", (req, res) => {
-  const { taskId, name, description, repositoryUrl, candidates } = req.body ?? {};
+  const { taskId, name, description, repositoryUrl, candidates, credential } = req.body ?? {};
   if (!taskId || !name || !description || !repositoryUrl) {
     return res.status(400).json({ error: "taskId, name, description and repositoryUrl are required" });
   }
   res.status(202).json({ status: "accepted", taskId });
-  runInitial({ taskId, name, description, repositoryUrl, candidates }).catch((err) =>
+  runInitial({ taskId, name, description, repositoryUrl, candidates, credential }).catch((err) =>
     console.error(`[task ${taskId}] run failed:`, err),
   );
 });
 
 // FR8: a PR-review comment re-triggers work on the existing branch.
 app.post("/feedback", (req, res) => {
-  const { taskId, repositoryUrl, branch, name, comments, authorAssociation } = req.body ?? {};
+  const { taskId, repositoryUrl, branch, name, comments, authorAssociation, credential } = req.body ?? {};
   if (!taskId || !repositoryUrl || !branch || !comments) {
     return res.status(400).json({ error: "taskId, repositoryUrl, branch and comments are required" });
   }
@@ -56,19 +67,22 @@ app.post("/feedback", (req, res) => {
     return res.status(403).json({ error: "feedback author is not a trusted reviewer" });
   }
   res.status(202).json({ status: "accepted", taskId });
-  runFeedback({ taskId, repositoryUrl, branch, name: name || branch, comments }).catch((err) =>
+  runFeedback({ taskId, repositoryUrl, branch, name: name || branch, comments, credential }).catch((err) =>
     console.error(`[task ${taskId}] feedback run failed:`, err),
   );
 });
 
-async function runInitial({ taskId, name, description, repositoryUrl, candidates }) {
+async function runInitial({ taskId, name, description, repositoryUrl, candidates, credential }) {
   // FR10: 1 candidate (default) or best-of-N for complex tasks (capped at 4).
   const n = Math.max(1, Math.min(Number(candidates || process.env.CANDIDATES || 1), 4));
   const budget = { spent: 0, cap: COST_CAP_USD };
+  // Run under the resolved credential (per-user or per-team, decided by the API).
+  const env = agentEnv(credential);
+  if (credential?.scope) console.log(`[task ${taskId}] running under ${credential.scope} credential`);
 
   // FR9: derive the spec once (grounded), shared across candidates.
   const probe = prepareWorkspace(repositoryUrl, `task/${taskId}`, { create: true });
-  const spec = await deriveSpec(taskId, probe, budget, name, description);
+  const spec = await deriveSpec(taskId, probe, budget, name, description, env);
 
   // Generate candidates; keep each green one with its reviewer-confidence score.
   const green = [];
@@ -81,7 +95,7 @@ async function runInitial({ taskId, name, description, repositoryUrl, candidates
     } else {
       workdir = prepareWorkspace(repositoryUrl, branch, { create: true });
     }
-    const candidate = await buildCandidate(taskId, workdir, branch, budget, name, spec);
+    const candidate = await buildCandidate(taskId, workdir, branch, budget, name, spec, env);
     if (candidate) green.push(candidate);
   }
 
@@ -112,10 +126,10 @@ async function reportResult(taskId, prUrl, costUsd) {
 }
 
 // One candidate: implement against the spec, pass the gate, score by review confidence.
-async function buildCandidate(taskId, workdir, branch, budget, name, spec) {
-  await runSession(taskId, workdir, budget, implementPrompt(name, spec));
-  if (!(await gate(taskId, workdir, budget))) return null;
-  const review = await reviewPatch(taskId, workdir, budget, name, spec);
+async function buildCandidate(taskId, workdir, branch, budget, name, spec, env) {
+  await runSession(taskId, workdir, budget, implementPrompt(name, spec), env);
+  if (!(await gate(taskId, workdir, budget, env))) return null;
+  const review = await reviewPatch(taskId, workdir, budget, name, spec, env);
   return { workdir, branch, review, score: scoreConfidence(review) };
 }
 
@@ -123,17 +137,18 @@ function scoreConfidence(review) {
   return { high: 3, medium: 2, low: 1 }[review?.confidence] || 0;
 }
 
-async function runFeedback({ taskId, repositoryUrl, branch, name, comments }) {
+async function runFeedback({ taskId, repositoryUrl, branch, name, comments, credential }) {
   const workdir = prepareWorkspace(repositoryUrl, branch, { create: false });
   const budget = { spent: 0, cap: COST_CAP_USD };
+  const env = agentEnv(credential);
 
-  await runSession(taskId, workdir, budget, feedbackPrompt(comments));
+  await runSession(taskId, workdir, budget, feedbackPrompt(comments), env);
 
-  if (!(await gate(taskId, workdir, budget))) {
+  if (!(await gate(taskId, workdir, budget, env))) {
     console.warn(`[task ${taskId}] feedback not green; leaving branch as-is for review`);
     return;
   }
-  const review = await reviewPatch(taskId, workdir, budget, name, comments);
+  const review = await reviewPatch(taskId, workdir, budget, name, comments, env);
   if (!commitAndPush(workdir, branch, `Address review feedback for: ${name}`)) {
     console.log(`[task ${taskId}] feedback produced no changes`);
     return;
@@ -146,21 +161,21 @@ async function runFeedback({ taskId, repositoryUrl, branch, name, comments }) {
 }
 
 // FR6: build + test gate with fix iterations. Returns true when green.
-async function gate(taskId, workdir, budget) {
+async function gate(taskId, workdir, budget, env) {
   for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
     const check = buildAndTest(workdir);
     if (check.ok) return true;
     if (attempt === MAX_FIX_ATTEMPTS || budget.spent >= budget.cap) return false;
     console.log(`[task ${taskId}] ${check.phase} failed (attempt ${attempt + 1}); asking agent to fix`);
-    await runSession(taskId, workdir, budget, fixPrompt(check.phase, check.output));
+    await runSession(taskId, workdir, budget, fixPrompt(check.phase, check.output), env);
   }
   return false;
 }
 
-async function runSession(taskId, cwd, budget, prompt) {
+async function runSession(taskId, cwd, budget, prompt, env) {
   for await (const message of query({
     prompt,
-    options: { cwd, permissionMode: "acceptEdits", allowedTools: ALLOWED_TOOLS, systemPrompt: SYSTEM_PROMPT },
+    options: { cwd, env, permissionMode: "acceptEdits", allowedTools: ALLOWED_TOOLS, systemPrompt: SYSTEM_PROMPT },
   })) {
     if (message.type === "result" && message.total_cost_usd != null) {
       budget.spent += message.total_cost_usd; // observability: per-task cost
@@ -186,7 +201,7 @@ function formatSpec(s) {
   return `INTENT: ${s.intent}\n\nACCEPTANCE CRITERIA:\n${list(s.acceptanceCriteria)}\n\nASSUMPTIONS:\n${list(s.assumptions)}`;
 }
 
-async function deriveSpec(taskId, cwd, budget, name, description) {
+async function deriveSpec(taskId, cwd, budget, name, description, env) {
   let spec = null;
   for await (const message of query({
     prompt:
@@ -194,6 +209,7 @@ async function deriveSpec(taskId, cwd, budget, name, description) {
       `Task: ${name}\n${description}\n\nDo not write code yet.`,
     options: {
       cwd,
+      env,
       permissionMode: "default",
       allowedTools: ["Read", "Grep", "Glob"],
       outputFormat: { type: "json_schema", schema: SPEC_SCHEMA },
@@ -225,7 +241,7 @@ function formatReview(r) {
   return `Confidence: ${r.confidence}\n\n${r.summary}\n\nRisks:\n${risks}`;
 }
 
-async function reviewPatch(taskId, cwd, budget, name, context) {
+async function reviewPatch(taskId, cwd, budget, name, context, env) {
   const diff = git(cwd, ["diff", "HEAD"]).stdout;
   let review = null;
   for await (const message of query({
@@ -235,6 +251,7 @@ async function reviewPatch(taskId, cwd, budget, name, context) {
       `Judge whether the change satisfies the task; report confidence, a summary and risks.`,
     options: {
       cwd,
+      env,
       permissionMode: "default",
       allowedTools: ["Read", "Grep", "Glob"],
       outputFormat: { type: "json_schema", schema: REVIEW_SCHEMA },

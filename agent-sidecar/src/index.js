@@ -56,15 +56,17 @@ async function runInitial({ taskId, name, description, repositoryUrl }) {
   const workdir = prepareWorkspace(repositoryUrl, branch, { create: true });
   const budget = { spent: 0, cap: COST_CAP_USD };
 
-  await runSession(taskId, workdir, budget, implementPrompt(name, description));
+  // FR9: derive/verify a spec from the task (grounded in the repo) before coding.
+  const spec = await deriveSpec(taskId, workdir, budget, name, description);
+  await runSession(taskId, workdir, budget, implementPrompt(name, spec));
 
   if (!(await gate(taskId, workdir, budget))) {
     console.warn(`[task ${taskId}] not green ($${budget.spent.toFixed(2)} spent); NOT opening PR (FR6)`);
     return;
   }
-  const review = await reviewPatch(taskId, workdir, budget, name, description);
+  const review = await reviewPatch(taskId, workdir, budget, name, spec);
   commitAndPush(workdir, branch, `Agent implementation for: ${name}`);
-  openDraftPullRequest(workdir, name, taskId, review, budget);
+  openDraftPullRequest(workdir, name, taskId, review, budget, spec);
 }
 
 async function runFeedback({ taskId, repositoryUrl, branch, name, comments }) {
@@ -113,6 +115,27 @@ async function runSession(taskId, cwd, budget, prompt) {
   }
 }
 
+// FR9: infer a spec from the task, grounded in the repo (read-only). The autonomous
+// run can't ask clarifying questions, so the agent states explicit assumptions instead.
+async function deriveSpec(taskId, cwd, budget, name, description) {
+  let spec = "";
+  for await (const message of query({
+    prompt:
+      `Derive a concise implementation spec for this task, grounded in the repository.\n` +
+      `Task: ${name}\n${description}\n\n` +
+      `Output: INTENT, ACCEPTANCE CRITERIA, and explicit ASSUMPTIONS (you cannot ask ` +
+      `questions, so record any assumption you make). Do not write code yet.`,
+    options: { cwd, permissionMode: "default", allowedTools: ["Read", "Grep", "Glob"] },
+  })) {
+    if (message.type === "result") {
+      if (message.total_cost_usd != null) budget.spent += message.total_cost_usd;
+      if (typeof message.result === "string") spec = message.result;
+    }
+  }
+  console.log(`[task ${taskId}] derived spec:\n${spec}`);
+  return spec || description; // fall back to the raw description if inference yields nothing
+}
+
 // FR7: read the diff and produce a confidence verdict (read-only tools, no edits).
 async function reviewPatch(taskId, cwd, budget, name, context) {
   const diff = git(cwd, ["diff", "HEAD"]).stdout;
@@ -143,12 +166,12 @@ function buildAndTest(workdir) {
 
 // --- prompts -----------------------------------------------------------------
 
-function implementPrompt(name, description) {
+function implementPrompt(name, spec) {
   return [
-    `Implement the following task in this repository.`,
+    `Implement the following task in this repository, working to the spec below.`,
     `Task: ${name}`,
     ``,
-    description,
+    spec,
     ``,
     `Follow .specify/memory/constitution.md. Keep changes scoped to this task.`,
     `Make sure the project builds and tests pass. Do not merge; a human reviews the draft PR.`,
@@ -197,10 +220,11 @@ function commitAndPush(workdir, branch, message) {
   return true;
 }
 
-function openDraftPullRequest(workdir, title, taskId, review, budget) {
+function openDraftPullRequest(workdir, title, taskId, review, budget, spec) {
   const body =
     `Automated draft for task ${taskId}. Build + tests are green.\n\n` +
-    `Agent cost: $${budget.spent.toFixed(2)}\n\n## Reviewer (LLM-as-judge)\n${review}`;
+    `Agent cost: $${budget.spent.toFixed(2)}\n\n` +
+    `## Spec (derived)\n${spec}\n\n## Reviewer (LLM-as-judge)\n${review}`;
   // gh uses GITHUB_TOKEN from the environment. --draft is the guardrail.
   spawnSync("gh", ["pr", "create", "--draft", "--title", `[agent] ${title}`, "--body", body], {
     cwd: workdir,

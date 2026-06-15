@@ -29,12 +29,12 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 // Initial run: implement a task and open a draft PR.
 app.post("/run", (req, res) => {
-  const { taskId, name, description, repositoryUrl } = req.body ?? {};
+  const { taskId, name, description, repositoryUrl, candidates } = req.body ?? {};
   if (!taskId || !name || !description || !repositoryUrl) {
     return res.status(400).json({ error: "taskId, name, description and repositoryUrl are required" });
   }
   res.status(202).json({ status: "accepted", taskId });
-  runInitial({ taskId, name, description, repositoryUrl }).catch((err) =>
+  runInitial({ taskId, name, description, repositoryUrl, candidates }).catch((err) =>
     console.error(`[task ${taskId}] run failed:`, err),
   );
 });
@@ -51,22 +51,53 @@ app.post("/feedback", (req, res) => {
   );
 });
 
-async function runInitial({ taskId, name, description, repositoryUrl }) {
-  const branch = `task/${taskId}`;
-  const workdir = prepareWorkspace(repositoryUrl, branch, { create: true });
+async function runInitial({ taskId, name, description, repositoryUrl, candidates }) {
+  // FR10: 1 candidate (default) or best-of-N for complex tasks (capped at 4).
+  const n = Math.max(1, Math.min(Number(candidates || process.env.CANDIDATES || 1), 4));
   const budget = { spent: 0, cap: COST_CAP_USD };
 
-  // FR9: derive/verify a spec from the task (grounded in the repo) before coding.
-  const spec = await deriveSpec(taskId, workdir, budget, name, description);
-  await runSession(taskId, workdir, budget, implementPrompt(name, spec));
+  // FR9: derive the spec once (grounded), shared across candidates.
+  const probe = prepareWorkspace(repositoryUrl, `task/${taskId}`, { create: true });
+  const spec = await deriveSpec(taskId, probe, budget, name, description);
 
-  if (!(await gate(taskId, workdir, budget))) {
-    console.warn(`[task ${taskId}] not green ($${budget.spent.toFixed(2)} spent); NOT opening PR (FR6)`);
+  // Generate candidates; keep each green one with its reviewer-confidence score.
+  const green = [];
+  for (let i = 0; i < n; i++) {
+    if (budget.spent >= budget.cap) break;
+    const branch = n === 1 ? `task/${taskId}` : `task/${taskId}-c${i + 1}`;
+    let workdir = probe;
+    if (i === 0) {
+      if (n > 1) git(workdir, ["checkout", "-B", branch]); // probe becomes candidate 1
+    } else {
+      workdir = prepareWorkspace(repositoryUrl, branch, { create: true });
+    }
+    const candidate = await buildCandidate(taskId, workdir, branch, budget, name, spec);
+    if (candidate) green.push(candidate);
+  }
+
+  if (green.length === 0) {
+    console.warn(`[task ${taskId}] no green candidate of ${n}; NOT opening PR (FR6)`);
     return;
   }
+  // Select the highest reviewer-confidence green candidate.
+  green.sort((a, b) => b.score - a.score);
+  const winner = green[0];
+  console.log(`[task ${taskId}] selected ${winner.branch} (score ${winner.score}) of ${green.length} green / ${n}`);
+  commitAndPush(winner.workdir, winner.branch, `Agent implementation for: ${name}`);
+  openDraftPullRequest(winner.workdir, name, taskId, winner.review, budget, spec);
+}
+
+// One candidate: implement against the spec, pass the gate, score by review confidence.
+async function buildCandidate(taskId, workdir, branch, budget, name, spec) {
+  await runSession(taskId, workdir, budget, implementPrompt(name, spec));
+  if (!(await gate(taskId, workdir, budget))) return null;
   const review = await reviewPatch(taskId, workdir, budget, name, spec);
-  commitAndPush(workdir, branch, `Agent implementation for: ${name}`);
-  openDraftPullRequest(workdir, name, taskId, review, budget, spec);
+  return { workdir, branch, review, score: scoreConfidence(review) };
+}
+
+function scoreConfidence(review) {
+  const m = /confidence[:\s]*\b(high|medium|low)\b/i.exec(review || "");
+  return m ? { high: 3, medium: 2, low: 1 }[m[1].toLowerCase()] : 0;
 }
 
 async function runFeedback({ taskId, repositoryUrl, branch, name, comments }) {

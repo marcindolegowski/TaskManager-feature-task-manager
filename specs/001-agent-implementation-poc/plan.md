@@ -36,7 +36,7 @@ TaskManager API (.NET)                      agent-sidecar (Node, Claude Agent SD
 | Iteration + cost caps (FR8 partial) | ✅ in sidecar | `MAX_FIX_ATTEMPTS`, `COST_CAP_USD` |
 | Feedback loop on PR comments (FR8) | ✅ in sidecar | `POST /feedback` re-runs pipeline on existing branch; webhook wiring pending |
 | Intent inference: derive spec (FR9) | ✅ in sidecar | grounded spec step before coding; spec in PR body |
-| Best-of-N for complex tasks (FR10) | ⬜ later | gated by complexity |
+| Best-of-N for complex tasks (FR10) | ✅ in sidecar | `candidates` (≤4); pick highest reviewer confidence among green |
 | Status + `PrUrl`/`AgentRunId` on `Task` | ⬜ next slice | progress visibility |
 | PR-merged webhook → `MoveToNextStatus()` | ⬜ next slice | close the loop |
 

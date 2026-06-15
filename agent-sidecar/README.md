@@ -41,6 +41,7 @@ PR review comment  ──(GitHub webhook)──▶  POST /feedback {taskId, bran
 | `BUILD_CMD` / `TEST_CMD` | `dotnet build/test …` | override per repo |
 | `MAX_FIX_ATTEMPTS` | `3` | FR6/FR8 fix iterations |
 | `COST_CAP_USD` | `2.0` | FR8 per-task cost ceiling |
+| `CANDIDATES` | `1` | FR10 best-of-N (≤4); also per-request `candidates` |
 
 ## Run
 

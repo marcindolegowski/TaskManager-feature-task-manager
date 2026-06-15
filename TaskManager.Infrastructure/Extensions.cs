@@ -81,7 +81,7 @@ public static class Extensions
         builder.AddServiceBusPublisher<TaskImplementationRequested>();
 
         // Agent sidecar (out-of-process Claude Agent SDK). API never runs the agent itself.
-        var sidecarUrl = Environment.GetEnvironmentVariable("AGENT_SIDECAR_URL") ?? "http://localhost:8787";
+        var sidecarUrl = builder.GetValue<string>("Agent:SidecarUrl") ?? "http://localhost:8787";
         builder.Services.AddSingleton<IAgentSidecarClient>(
             _ => new HttpAgentSidecarClient(new HttpClient { BaseAddress = new Uri(sidecarUrl) }));
 
@@ -89,7 +89,7 @@ public static class Extensions
         builder.Services.AddScoped<IAgentRunStore, AgentRunStore>();
 
         // Per-user / per-team agent credentials (Azure Key Vault when configured).
-        var keyVaultUri = Environment.GetEnvironmentVariable("AZURE_KEYVAULT_URI");
+        var keyVaultUri = builder.GetValue<string>("Agent:KeyVaultUri");
         if (!string.IsNullOrEmpty(keyVaultUri))
         {
             builder.Services.AddSingleton(new SecretClient(new Uri(keyVaultUri), new DefaultAzureCredential()));
@@ -99,7 +99,10 @@ public static class Extensions
         {
             builder.Services.AddScoped<ICredentialStore, NullCredentialStore>();
         }
-        builder.Services.AddScoped<ICredentialResolver, UserFirstCredentialResolver>();
+
+        var teamId = builder.GetValue<string>("Agent:TeamId") ?? "default";
+        builder.Services.AddScoped<ICredentialResolver>(sp =>
+            new UserFirstCredentialResolver(sp.GetRequiredService<ICredentialStore>(), teamId));
 
         return builder;
     }

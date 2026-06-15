@@ -1,4 +1,3 @@
-using System;
 using System.Threading.Tasks;
 
 namespace TaskManager.Application.Agents;
@@ -13,10 +12,10 @@ public class UserFirstCredentialResolver : ICredentialResolver
     private readonly ICredentialStore _store;
     private readonly string _teamId;
 
-    public UserFirstCredentialResolver(ICredentialStore store)
+    public UserFirstCredentialResolver(ICredentialStore store, string teamId)
     {
         _store = store;
-        _teamId = Environment.GetEnvironmentVariable("AGENT_TEAM_ID") ?? "default";
+        _teamId = string.IsNullOrEmpty(teamId) ? "default" : teamId;
     }
 
     public async Task<ResolvedCredential?> ResolveAsync(string? userId)

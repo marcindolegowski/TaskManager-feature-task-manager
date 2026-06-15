@@ -120,8 +120,7 @@ async function buildCandidate(taskId, workdir, branch, budget, name, spec) {
 }
 
 function scoreConfidence(review) {
-  const m = /confidence[:\s]*\b(high|medium|low)\b/i.exec(review || "");
-  return m ? { high: 3, medium: 2, low: 1 }[m[1].toLowerCase()] : 0;
+  return { high: 3, medium: 2, low: 1 }[review?.confidence] || 0;
 }
 
 async function runFeedback({ taskId, repositoryUrl, branch, name, comments }) {
@@ -140,7 +139,7 @@ async function runFeedback({ taskId, repositoryUrl, branch, name, comments }) {
     return;
   }
   // PR already exists for this branch — just add a comment with the new review.
-  spawnSync("gh", ["pr", "comment", branch, "--body", `Addressed feedback.\n\n## Reviewer (LLM-as-judge)\n${review}`], {
+  spawnSync("gh", ["pr", "comment", branch, "--body", `Addressed feedback.\n\n## Reviewer (LLM-as-judge)\n${formatReview(review)}`], {
     cwd: workdir,
     stdio: "inherit",
   });
@@ -170,45 +169,85 @@ async function runSession(taskId, cwd, budget, prompt) {
   }
 }
 
-// FR9: infer a spec from the task, grounded in the repo (read-only). The autonomous
-// run can't ask clarifying questions, so the agent states explicit assumptions instead.
+// FR9: infer a spec from the task, grounded in the repo (read-only), as typed JSON.
+// The autonomous run can't ask questions, so the agent records explicit assumptions.
+const SPEC_SCHEMA = {
+  type: "object",
+  properties: {
+    intent: { type: "string" },
+    acceptanceCriteria: { type: "array", items: { type: "string" } },
+    assumptions: { type: "array", items: { type: "string" } },
+  },
+  required: ["intent"],
+};
+
+function formatSpec(s) {
+  const list = (xs) => (xs && xs.length ? xs.map((x) => `- ${x}`).join("\n") : "- (none)");
+  return `INTENT: ${s.intent}\n\nACCEPTANCE CRITERIA:\n${list(s.acceptanceCriteria)}\n\nASSUMPTIONS:\n${list(s.assumptions)}`;
+}
+
 async function deriveSpec(taskId, cwd, budget, name, description) {
-  let spec = "";
+  let spec = null;
   for await (const message of query({
     prompt:
       `Derive a concise implementation spec for this task, grounded in the repository.\n` +
-      `Task: ${name}\n${description}\n\n` +
-      `Output: INTENT, ACCEPTANCE CRITERIA, and explicit ASSUMPTIONS (you cannot ask ` +
-      `questions, so record any assumption you make). Do not write code yet.`,
-    options: { cwd, permissionMode: "default", allowedTools: ["Read", "Grep", "Glob"] },
+      `Task: ${name}\n${description}\n\nDo not write code yet.`,
+    options: {
+      cwd,
+      permissionMode: "default",
+      allowedTools: ["Read", "Grep", "Glob"],
+      outputFormat: { type: "json_schema", schema: SPEC_SCHEMA },
+    },
   })) {
     if (message.type === "result") {
       if (message.total_cost_usd != null) budget.spent += message.total_cost_usd;
-      if (typeof message.result === "string") spec = message.result;
+      if (message.subtype === "success" && message.structured_output) spec = message.structured_output;
     }
   }
-  console.log(`[task ${taskId}] derived spec:\n${spec}`);
-  return spec || description; // fall back to the raw description if inference yields nothing
+  if (!spec) return description; // fall back to the raw description if inference fails
+  console.log(`[task ${taskId}] derived spec:`, JSON.stringify(spec));
+  return formatSpec(spec);
 }
 
-// FR7: read the diff and produce a confidence verdict (read-only tools, no edits).
+// FR7: structured review (LLM-as-judge) — typed JSON, no free-text parsing.
+const REVIEW_SCHEMA = {
+  type: "object",
+  properties: {
+    confidence: { type: "string", enum: ["low", "medium", "high"] },
+    summary: { type: "string" },
+    risks: { type: "array", items: { type: "string" } },
+  },
+  required: ["confidence", "summary"],
+};
+
+function formatReview(r) {
+  const risks = r.risks && r.risks.length ? r.risks.map((x) => `- ${x}`).join("\n") : "- none noted";
+  return `Confidence: ${r.confidence}\n\n${r.summary}\n\nRisks:\n${risks}`;
+}
+
 async function reviewPatch(taskId, cwd, budget, name, context) {
   const diff = git(cwd, ["diff", "HEAD"]).stdout;
-  let verdict = "";
+  let review = null;
   for await (const message of query({
     prompt:
       `Act as an independent reviewer (LLM-as-judge) for this change.\n` +
       `Task: ${name}\n${context}\n\nDiff:\n${tail(diff, 12000)}\n\n` +
-      `Respond with CONFIDENCE (low/medium/high), a one-paragraph SUMMARY, and RISKS.`,
-    options: { cwd, permissionMode: "default", allowedTools: ["Read", "Grep", "Glob"] },
+      `Judge whether the change satisfies the task; report confidence, a summary and risks.`,
+    options: {
+      cwd,
+      permissionMode: "default",
+      allowedTools: ["Read", "Grep", "Glob"],
+      outputFormat: { type: "json_schema", schema: REVIEW_SCHEMA },
+    },
   })) {
     if (message.type === "result") {
       if (message.total_cost_usd != null) budget.spent += message.total_cost_usd;
-      if (typeof message.result === "string") verdict = message.result;
+      if (message.subtype === "success" && message.structured_output) review = message.structured_output;
     }
   }
-  console.log(`[task ${taskId}] review:\n${verdict}`);
-  return verdict || "Reviewer produced no verdict.";
+  if (!review) review = { confidence: "low", summary: "Reviewer produced no verdict.", risks: [] };
+  console.log(`[task ${taskId}] review:`, JSON.stringify(review));
+  return review;
 }
 
 function buildAndTest(workdir) {
@@ -279,7 +318,7 @@ function openDraftPullRequest(workdir, title, taskId, review, budget, spec) {
   const body =
     `Automated draft for task ${taskId}. Build + tests are green.\n\n` +
     `Agent cost: $${budget.spent.toFixed(2)}\n\n` +
-    `## Spec (derived)\n${spec}\n\n## Reviewer (LLM-as-judge)\n${review}`;
+    `## Spec (derived)\n${spec}\n\n## Reviewer (LLM-as-judge)\n${formatReview(review)}`;
   // gh uses GITHUB_TOKEN from the environment. --draft is the guardrail.
   const r = spawnSync("gh", ["pr", "create", "--draft", "--title", `[agent] ${title}`, "--body", body], {
     cwd: workdir,

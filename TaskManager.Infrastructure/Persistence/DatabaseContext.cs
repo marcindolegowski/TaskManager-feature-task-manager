@@ -12,6 +12,8 @@ public class DatabaseContext : DbContext
 
     protected internal DbSet<Task>? Users { get; set; }
 
+    protected internal DbSet<AgentRun>? AgentRuns { get; set; }
+
     protected internal DbSet<OutboxMessage>? OutboxMessages { get; set; }
 
     public DatabaseContext(DbContextOptions<DatabaseContext> options)

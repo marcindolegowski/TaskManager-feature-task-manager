@@ -42,6 +42,11 @@ PR review comment  ──(GitHub webhook)──▶  POST /feedback {taskId, bran
 | `MAX_FIX_ATTEMPTS` | `3` | FR6/FR8 fix iterations |
 | `COST_CAP_USD` | `2.0` | FR8 per-task cost ceiling |
 | `CANDIDATES` | `1` | FR10 best-of-N (≤4); also per-request `candidates` |
+| `TASKMANAGER_API_URL` | `http://localhost:5000` | report opened PR back to `/api/agent/result` |
+
+After opening the PR the sidecar POSTs `{taskId, prUrl, costUsd}` to the .NET API's
+`/api/agent/result`, which records the `AgentRun` and advances the task to `InProgress`.
+A GitHub `pull_request` (merged) webhook to `/api/agent/webhook` then completes the task.
 
 ## Run
 

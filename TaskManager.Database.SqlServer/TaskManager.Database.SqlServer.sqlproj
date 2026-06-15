@@ -67,7 +67,9 @@
     <Build Include="dbo\Tables\Audits.sql" />
     <Build Include="dbo\Tables\OutboxMessages.sql" />
     <Build Include="dbo\Tables\Tasks.sql" />
+    <Build Include="dbo\Tables\AgentRuns.sql" />
     <None Include="Scripts\Migrations\0003-AddOutboxMessagesTable.sql" />
+    <None Include="Scripts\Migrations\0004-AddAgentRunsTable.sql" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Scripts\Migrations\0002-AddTasksTable.sql">

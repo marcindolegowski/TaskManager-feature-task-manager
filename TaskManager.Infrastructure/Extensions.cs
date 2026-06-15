@@ -24,6 +24,7 @@ using Accessory.Persistence.EntityFramework.UnitOfWork.Common;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using TaskManager.Application.Agents;
 using TaskManager.Application.Task.Agents;
 using TaskManager.Application.Task.Events;
 using TaskManager.Application.User.Events;
@@ -81,6 +82,9 @@ public static class Extensions
         var sidecarUrl = Environment.GetEnvironmentVariable("AGENT_SIDECAR_URL") ?? "http://localhost:8787";
         builder.Services.AddSingleton<IAgentSidecarClient>(
             _ => new HttpAgentSidecarClient(new HttpClient { BaseAddress = new Uri(sidecarUrl) }));
+
+        // Agent-run metadata store (operational; kept out of the Task aggregate).
+        builder.Services.AddScoped<IAgentRunStore, AgentRunStore>();
 
         return builder;
     }

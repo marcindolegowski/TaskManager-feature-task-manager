@@ -19,6 +19,7 @@ const TEST_CMD = (process.env.TEST_CMD || `dotnet test ${BUILD_TARGET} --nologo 
 const MAX_FIX_ATTEMPTS = Number(process.env.MAX_FIX_ATTEMPTS || 3); // FR8: iteration cap
 const COST_CAP_USD = Number(process.env.COST_CAP_USD || 2.0); // FR8: cost ceiling
 const ALLOWED_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"];
+const TASKMANAGER_API_URL = process.env.TASKMANAGER_API_URL || "http://localhost:5000";
 const SYSTEM_PROMPT =
   "You are a senior engineer. Obey the repository constitution at " +
   ".specify/memory/constitution.md. Produce a focused, reviewable change.";
@@ -84,7 +85,21 @@ async function runInitial({ taskId, name, description, repositoryUrl, candidates
   const winner = green[0];
   console.log(`[task ${taskId}] selected ${winner.branch} (score ${winner.score}) of ${green.length} green / ${n}`);
   commitAndPush(winner.workdir, winner.branch, `Agent implementation for: ${name}`);
-  openDraftPullRequest(winner.workdir, name, taskId, winner.review, budget, spec);
+  const prUrl = openDraftPullRequest(winner.workdir, name, taskId, winner.review, budget, spec);
+  await reportResult(taskId, prUrl, budget.spent);
+}
+
+// Report the opened PR back to the .NET API so it records the AgentRun and advances status.
+async function reportResult(taskId, prUrl, costUsd) {
+  try {
+    await fetch(`${TASKMANAGER_API_URL}/api/agent/result`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId, prUrl, costUsd }),
+    });
+  } catch (err) {
+    console.error(`[task ${taskId}] failed to report result:`, err);
+  }
 }
 
 // One candidate: implement against the spec, pass the gate, score by review confidence.
@@ -257,10 +272,14 @@ function openDraftPullRequest(workdir, title, taskId, review, budget, spec) {
     `Agent cost: $${budget.spent.toFixed(2)}\n\n` +
     `## Spec (derived)\n${spec}\n\n## Reviewer (LLM-as-judge)\n${review}`;
   // gh uses GITHUB_TOKEN from the environment. --draft is the guardrail.
-  spawnSync("gh", ["pr", "create", "--draft", "--title", `[agent] ${title}`, "--body", body], {
+  const r = spawnSync("gh", ["pr", "create", "--draft", "--title", `[agent] ${title}`, "--body", body], {
     cwd: workdir,
-    stdio: "inherit",
+    encoding: "utf8",
   });
+  if (r.stdout) process.stdout.write(r.stdout);
+  if (r.stderr) process.stderr.write(r.stderr);
+  const last = (r.stdout || "").trim().split("\n").pop() || "";
+  return last.startsWith("http") ? last : ""; // gh prints the PR URL on success
 }
 
 function git(cwd, args) {

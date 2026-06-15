@@ -85,6 +85,8 @@ internal class FakeBusPublisher : IBusPublisher<TaskImplementationRequested>
 internal class FakeAgentRunStore : IAgentRunStore
 {
     public List<Guid> Requested { get; } = new();
+    public List<(Guid TaskId, string PrUrl, decimal Cost)> PrOpened { get; } = new();
+    public List<Guid> Merged { get; } = new();
 
     public System.Threading.Tasks.Task RecordRequestedAsync(Guid taskId, string branch)
     {
@@ -92,9 +94,15 @@ internal class FakeAgentRunStore : IAgentRunStore
         return System.Threading.Tasks.Task.CompletedTask;
     }
 
-    public System.Threading.Tasks.Task RecordPrOpenedAsync(Guid taskId, string prUrl, decimal costUsd) =>
-        System.Threading.Tasks.Task.CompletedTask;
+    public System.Threading.Tasks.Task RecordPrOpenedAsync(Guid taskId, string prUrl, decimal costUsd)
+    {
+        PrOpened.Add((taskId, prUrl, costUsd));
+        return System.Threading.Tasks.Task.CompletedTask;
+    }
 
-    public System.Threading.Tasks.Task RecordMergedAsync(Guid taskId) =>
-        System.Threading.Tasks.Task.CompletedTask;
+    public System.Threading.Tasks.Task RecordMergedAsync(Guid taskId)
+    {
+        Merged.Add(taskId);
+        return System.Threading.Tasks.Task.CompletedTask;
+    }
 }

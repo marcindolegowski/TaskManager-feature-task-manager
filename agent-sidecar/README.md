@@ -18,7 +18,17 @@ TaskManager API
                        ├─ build + test gate, fix on failure (FR6)      ◀─ loop
                        ├─ reviewer / LLM-as-judge confidence note (FR7)
                        └─ git push + gh pr create --draft  (green only)
+
+PR review comment  ──(GitHub webhook)──▶  POST /feedback {taskId, branch, comments}
+                       └─ re-run pipeline on the existing branch (FR8) → push + gh pr comment
 ```
+
+## Endpoints
+
+- `POST /run` — `{ taskId, name, description, repositoryUrl }`: implement + open draft PR.
+- `POST /feedback` — `{ taskId, repositoryUrl, branch, comments }`: address review
+  feedback on the existing branch. Wire a GitHub `pull_request_review_comment` /
+  `issue_comment` webhook to this (directly or via a small relay).
 
 ## Configuration
 

@@ -14,12 +14,17 @@ public class TaskImplementationRequested : IntegrationEvent
 
     public string RepositoryUrl { get; }
 
-    public TaskImplementationRequested(Guid taskId, string name, string description, string repositoryUrl)
+    // Identity of the developer who requested the work; the token is resolved at the
+    // edge (never travels on the bus). Null => fall back to the team/ambient credential.
+    public string? UserId { get; }
+
+    public TaskImplementationRequested(Guid taskId, string name, string description, string repositoryUrl, string? userId)
     {
         TaskId = taskId;
         Name = name;
         Description = description;
         RepositoryUrl = repositoryUrl;
+        UserId = userId;
         CreationDate = SystemTime.OffsetNow();
     }
 }

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Net.Http;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 using Accessory.Builder.Core.Builders;
 using Accessory.Builder.Core.Domain.Exceptions;
 using Accessory.Builder.CQRS.Core;
@@ -85,6 +87,19 @@ public static class Extensions
 
         // Agent-run metadata store (operational; kept out of the Task aggregate).
         builder.Services.AddScoped<IAgentRunStore, AgentRunStore>();
+
+        // Per-user / per-team agent credentials (Azure Key Vault when configured).
+        var keyVaultUri = Environment.GetEnvironmentVariable("AZURE_KEYVAULT_URI");
+        if (!string.IsNullOrEmpty(keyVaultUri))
+        {
+            builder.Services.AddSingleton(new SecretClient(new Uri(keyVaultUri), new DefaultAzureCredential()));
+            builder.Services.AddScoped<ICredentialStore, KeyVaultCredentialStore>();
+        }
+        else
+        {
+            builder.Services.AddScoped<ICredentialStore, NullCredentialStore>();
+        }
+        builder.Services.AddScoped<ICredentialResolver, UserFirstCredentialResolver>();
 
         return builder;
     }

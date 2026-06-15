@@ -15,4 +15,9 @@ public record AgentImplementationRequest(
     string TaskId,
     string Name,
     string Description,
-    string RepositoryUrl);
+    string RepositoryUrl,
+    AgentRunCredential? Credential);
+
+// Credential resolved for this run (user or team scope). Serialized to the sidecar
+// as { oauthToken, apiKey, scope } — never logged, never put on the message bus.
+public record AgentRunCredential(string? OauthToken, string? ApiKey, string Scope);

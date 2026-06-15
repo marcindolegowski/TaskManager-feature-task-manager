@@ -38,6 +38,6 @@ public class RequestTaskImplementationCommandHandler : ICommandHandler<RequestTa
         await _agentRunStore.RecordRequestedAsync(task.Id.Value, $"task/{task.Id.Value}");
 
         await _busPublisher.PublishEventAsync(new TaskImplementationRequested(
-            task.Id.Value, task.Name, task.Description, command.RepositoryUrl));
+            task.Id.Value, task.Name, task.Description, command.RepositoryUrl, command.UserId));
     }
 }

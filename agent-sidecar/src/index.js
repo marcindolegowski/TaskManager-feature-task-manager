@@ -20,6 +20,10 @@ const MAX_FIX_ATTEMPTS = Number(process.env.MAX_FIX_ATTEMPTS || 3); // FR8: iter
 const COST_CAP_USD = Number(process.env.COST_CAP_USD || 2.0); // FR8: cost ceiling
 const ALLOWED_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"];
 const TASKMANAGER_API_URL = process.env.TASKMANAGER_API_URL || "http://localhost:5000";
+// Only these GitHub author associations may steer an autonomous agent via /feedback.
+const TRUSTED_ASSOCIATIONS = (process.env.TRUSTED_ASSOCIATIONS || "OWNER,MEMBER,COLLABORATOR")
+  .split(",")
+  .map((s) => s.trim().toUpperCase());
 const SYSTEM_PROMPT =
   "You are a senior engineer. Obey the repository constitution at " +
   ".specify/memory/constitution.md. Produce a focused, reviewable change.";
@@ -42,9 +46,14 @@ app.post("/run", (req, res) => {
 
 // FR8: a PR-review comment re-triggers work on the existing branch.
 app.post("/feedback", (req, res) => {
-  const { taskId, repositoryUrl, branch, name, comments } = req.body ?? {};
+  const { taskId, repositoryUrl, branch, name, comments, authorAssociation } = req.body ?? {};
   if (!taskId || !repositoryUrl || !branch || !comments) {
     return res.status(400).json({ error: "taskId, repositoryUrl, branch and comments are required" });
+  }
+  // Guardrail: untrusted PR comments must not steer the agent (prompt-injection).
+  if (!authorAssociation || !TRUSTED_ASSOCIATIONS.includes(String(authorAssociation).toUpperCase())) {
+    console.warn(`[task ${taskId}] rejected feedback from association '${authorAssociation}'`);
+    return res.status(403).json({ error: "feedback author is not a trusted reviewer" });
   }
   res.status(202).json({ status: "accepted", taskId });
   runFeedback({ taskId, repositoryUrl, branch, name: name || branch, comments }).catch((err) =>

@@ -14,9 +14,23 @@ TaskManager API
             └─ TaskImplementationRequestedHandler → HttpAgentSidecarClient
                  └─ POST /run  ──▶  this sidecar
                        ├─ clone repo, checkout task/{id}
-                       ├─ Claude Agent SDK query() with scoped tools
-                       └─ git push + gh pr create --draft
+                       ├─ Claude Agent SDK query() with scoped tools   (implement)
+                       ├─ build + test gate, fix on failure (FR6)      ◀─ loop
+                       ├─ reviewer / LLM-as-judge confidence note (FR7)
+                       └─ git push + gh pr create --draft  (green only)
 ```
+
+## Configuration
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | — | Claude Agent SDK auth |
+| `GITHUB_TOKEN` | — | `gh` push + draft PR |
+| `PORT` | `8787` | sidecar port |
+| `BUILD_TARGET` | `TaskManager.Server.sln` | build/test target |
+| `BUILD_CMD` / `TEST_CMD` | `dotnet build/test …` | override per repo |
+| `MAX_FIX_ATTEMPTS` | `3` | FR6/FR8 fix iterations |
+| `COST_CAP_USD` | `2.0` | FR8 per-task cost ceiling |
 
 ## Run
 

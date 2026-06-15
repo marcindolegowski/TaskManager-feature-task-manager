@@ -31,9 +31,10 @@ TaskManager API (.NET)                      agent-sidecar (Node, Claude Agent SD
 | `IAgentSidecarClient` + `HttpAgentSidecarClient` | ✅ scaffolded | port/adapter |
 | `RequestTaskImplementationCommand` (+ handler) + endpoint | ✅ scaffolded | trigger |
 | Sidecar `POST /run` (clone, agent run, draft PR) | ✅ scaffolded | `agent-sidecar/` |
-| Build+test gate (FR6) | ⬜ to build | loop `dotnet build`+tests; PR only when green |
-| Reviewer / LLM-as-judge (FR7) | ⬜ to build | patch-vs-spec confidence note on PR |
-| Feedback loop: memory + rollback + caps (FR8) | ⬜ to build | resume session on PR comments |
+| Build+test gate (FR6) | ✅ in sidecar | loops `dotnet build`+tests, fixes on failure, PR only when green |
+| Reviewer / LLM-as-judge (FR7) | ✅ in sidecar | reviews diff, confidence note in PR body |
+| Iteration + cost caps (FR8 partial) | ✅ in sidecar | `MAX_FIX_ATTEMPTS`, `COST_CAP_USD` |
+| Feedback loop on PR comments (FR8) | ⬜ to build | resume session on PR comment webhook |
 | Intent inference: specify/clarify (FR9) | ⬜ to wire | use Spec Kit skills |
 | Best-of-N for complex tasks (FR10) | ⬜ later | gated by complexity |
 | Status + `PrUrl`/`AgentRunId` on `Task` | ⬜ next slice | progress visibility |

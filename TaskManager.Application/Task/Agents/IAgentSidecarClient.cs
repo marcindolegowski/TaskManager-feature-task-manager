@@ -8,7 +8,7 @@ namespace TaskManager.Application.Task.Agents;
 /// </summary>
 public interface IAgentSidecarClient
 {
-    Task RequestImplementationAsync(AgentImplementationRequest request);
+    System.Threading.Tasks.Task RequestImplementationAsync(AgentImplementationRequest request);
 }
 
 public record AgentImplementationRequest(
